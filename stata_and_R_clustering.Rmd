@@ -1,0 +1,885 @@
+---
+title: "Clustered and robust standard errors in Stata and R"
+author: "Robert McDonald"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document: 
+    toc: true
+    number_sections: true
+  pdf_document: 
+     number_sections: true 
+     keep_tex: true
+     toc: true
+     toc_depth: 3
+colorlinks: true
+link-citations: true
+linkcolor: 'blue'
+colortoc: true
+toccolor: 'blue'
+geometry: "left=1.25in, right=1.25in, top=1in, bottom=1in"
+bibliography: "bib/petersen.bib"
+header-includes:
+    \usepackage{booktabs}
+    \usepackage{dcolumn}
+---
+
+
+
+
+```{r setup, echo=FALSE, message=FALSE}
+show <- FALSE  ## show results in text?
+all_lines <- FALSE ## show complete chunk, or exclude some lines?
+##show <- TRUE
+##all_lines <- TRUE
+whichlines <- function(v, tf=all_lines) if (tf) TRUE else v
+library(knitr)
+library(stargazer)
+output_type = 'latex'
+if (!knitr::is_latex_output()) output_type = 'html'
+knitr::opts_chunk$set(echo = TRUE,
+                      collapse=TRUE,
+                      message=FALSE,
+                      comment=NA
+                      )
+#knitr::opts_knit$set(root.dir='~/git/rmcd/stataR')
+options(digits=6)
+```
+
+
+\newpage
+
+# License
+
+![](88x31.png)
+
+This work is licensed under a [Creative Commons Attribution-ShareAlike
+4.0 International
+License](http://creativecommons.org/licenses/by-sa/4.0/). To view this
+license visit http://creativecommons.org/licenses/by-sa/4.0/ 
+
+
+# Introduction
+
+This document illustrates estimation with clustered standard errors in
+both Stata and R. The pdf version shows both Stata and R output, while
+the html version shows only R output. The purpose is to illustrate R
+counterparts to the procedures documented in @petersen:09 and [the
+companion
+website](https://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/standarderror.html),
+which uses Stata. I do not explain the econometric issues or make any
+claims about the superiority of an estimator.^[
+@berger/graham/zeileis:17, a vignette from the `sandwich` package,
+provides an overview of the topic and has numerous references.]  This
+is purely an exercise in mimicking results across statistical
+packages, something that seems to be a Frequently Asked
+Question.^[There are numerous posts online comparing results in Stata
+and R, with some matching and some failing to match results. Examples
+include [this Stackoverflow
+post](https://stackoverflow.com/questions/30236487/replicating-stata-probit-with-robust-errors-in-r),
+and [this Princeton
+tutorial](http://data.princeton.edu/wws509/r/robust.html).]
+
+The commands in Stata and R differ, as the languages differ. In Stata,
+statistical procedures are a command, with `vce(robust)` and
+`vce(cluster)` as options. In R, coefficient estimation is a function
+and the output from this estimation can then be used as the input to
+another function to compute the covariance matrix. These two
+components (estimates and covariance matrix) can then be fed to a
+function that computes standard errors and p-values. For an R user,
+Stata may seem too inflexible and hard-coded, while for a Stata user,
+R may seem needlessly complicated.
+
+In what follows, standard Stata calculations are used for single
+clustering. The function for double clustering, `cluster2`, was
+written by Mitchell Petersen and [obtained from his web
+site](http://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/se/cluster2.ado). This
+was also the source for the other functions with double clustering:
+[logit2.ado](https://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/se/logit2.ado),
+[probit2.ado](https://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/se/probit2.ado),
+and
+[tobit2.ado](https://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/se/tobit2.ado)
+
+
+In all cases, standard and widely-adopted R packages are used to
+compute both single and double clusters.  For examples of clustering
+with R see [the documentation for the sandwich
+package](https://cran.r-project.org/web/packages/sandwich), especially
+@berger/graham/zeileis:17.  The approach to computing clustered
+standard errors is identical in all cases we consider. We obtain
+coefficient estimates (e.g. using `lm`) and then use `vcovCL` from the
+`sandwich` package to compute the standard errors. By default,
+`vcovCL` computes robust standard errors, as does the `robust` option
+in Stata. Optionally, `vcovCL` can cluster along one or more
+dimensions. The coefficient and covariance estimates are then fed to
+`lmtest::testcoef`, which returns the estimates, standard errors, and
+p-values.  This procedure also accommodates bootstrapping, using the
+`vcovBS` function, but I haven't yet experimented yet with that
+capability.
+
+Here are examples producing identical estimates and roughly the same
+output in Stata and R.
+
+Stata: 
+```{stata, eval=FALSE}
+use "data/petersen.dta"
+reg y x, robust
+reg y x, vce(cluster firm)
+```
+
+R:
+```{r, eval=FALSE}
+library(sandwich)
+library(lmtest)
+data(PetersenCL)
+reg = lm(y ~ x, data=PetersenCL)  ## estimate the regression
+print(coeftest(reg, vcovCL(reg, type='HC1')), digits=6) 
+print(coeftest(reg, vcovCL(reg, type='HC1', cluster=~firm)), digits=6)
+```
+
+The R function `lm` generates OLS estimates.  The regression object,
+`reg`, is then an argument when computing standard errors using
+`vcovCL`.^[The `vcovCL` function is object-oriented, so it adapts to
+whatever regression object it receives. One benefit of this approach
+is that the author of an estimation package can rely on the `sandwich`
+package for standard errors. Similarly, improvements in the `sandwich`
+package automatically accrue to estimation packages.]
+
+This document was created by knitting the Rmarkdown document
+`stata_and_R_clustering.Rmd`.^[If you have Stata installed,
+`rmarkdown::render` can execute Stata code and include the output in a
+document. The restriction is that the `render` function executes each
+Stata chunk is a separate Stata process, so data is not shared across
+chunks. This is not a restriction for R or Python chunks.]Tables in
+Stata were produced using
+[outreg2](http://repec.org/bocode/o/outreg2.html), and those in R
+using `stargazer` [@stargazer:5.2.2].
+
+\newpage
+
+# OLS: Vanilla and robust
+
+Here are baseline calculations without clustering and calculating
+robust standard errors.
+
+## Stata
+ 
+Results are in Table \ref{tbl:ols:stata}. 
+ 
+```{stata olsbases, results=show, echo=whichlines(-c(3, 5))}
+use "data/petersen.dta"
+regress y x
+outreg2 using tmp, replace  ctitle(OLS) auto(5) tex(fragment)
+regress y x, robust
+outreg2 using tmp,  ctitle(Robust OLS) auto(5) tex(fragment)
+```
+
+## R
+
+The variable `reg` contains the full OLS regression output, which 
+is used in subsequent calculations. We save the output from the
+`coeftest` function. Results are in Table \ref{tbl:ols:r}.
+
+```{r olsbaser, results=show, echo=whichlines(-c(6,8))}
+library(sandwich)
+library(lmtest)
+data(PetersenCL)
+reg <- lm(y ~ x, data = PetersenCL) ## `reg` is used throughout
+regols = coeftest(reg)  ## OLS
+print(regols, digits=6)
+regolsr = coeftest(reg, vcovCL)   ## Robust std errors
+print(regolsr, digits=6)
+```
+# OLS: Cluster by year
+
+Stata results in this section are in Table \ref{tbl:ols:stata}. R
+results are in Table \ref{tbl:ols:r}.
+
+## Stata
+```{stata clusteryears, results=show, echo=whichlines(-3)}
+use "data/petersen.dta"
+regress y x, vce(cluster year)
+outreg2 using tmp,  ctitle(Cluster: year) auto(5) tex(fragment)
+```
+
+## R
+
+The `vcovCL` function takes as arguments: the estimated model,
+the cluster variable, and the type of clustering calculation. We don't
+need to have separate functions for the covariance matrix and the
+regression output, but this perhaps illustrates what's going on. 
+
+
+```{r clusteryearr, results=show, echo=whichlines(-3)}
+v_year = vcovCL(reg, type='HC1', cluster = ~year)
+reg_year = coeftest(reg, v_year)   
+print(reg_year, digits=6)
+```
+
+Both
+of the following  syntaxes would also work:
+
+```{r}
+reg_year1 = coeftest(reg, vcovCL(reg, cluster= ~year, type='HC1'))
+reg_year2 = coeftest(reg, vcovCL, cluster= ~year, type='HC1')
+all.equal(reg_year1, reg_year2)
+```
+
+
+
+# OLS: Cluster by firm
+
+Stata results in this section are in Table \ref{tbl:ols:stata}. R
+results are in Table \ref{tbl:ols:r}.
+
+
+## Stata
+
+Results are
+in Table \ref{tbl:ols:stata}.
+
+```{stata clusterfirms, results=show, echo=whichlines(-3)}
+use "data/petersen.dta"
+regress y x, vce(cluster firm)
+outreg2 using tmp,  ctitle(Cluster: firm) auto(5) tex(fragment)
+```
+
+## R
+
+
+```{r clusterfirmr, results=show, echo=whichlines(-3)}
+v_firm = vcovCL(reg, type="HC1", cluster = ~firm)
+reg_firm = coeftest(reg, v_firm)
+print(reg_firm, digits=6)
+```
+
+
+# OLS: Cluster by both firm and year
+
+Stata results in this section are in Table \ref{tbl:ols:stata}. R
+results are in Table \ref{tbl:ols:r}.
+
+## Stata
+
+This uses Petersen's [cluster2](http://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/se/cluster2.ado) function
+
+```{stata clusterboths, results=show, echo=whichlines(-3)}
+use "data/petersen.dta"
+cluster2 y x, fcluster(firm) tcluster(year)
+outreg2 using tmp,  ctitle(Cluster: both)   auto(5) tex(fragment)
+```
+
+## R
+
+The `sandwich` package handles double clustering in the same way as
+single clustering:
+
+```{r clusterbothr, results=show, echo=whichlines(-3)}
+v_both = vcovCL(reg, type='HC1', cluster = ~firm+year)
+reg_both = coeftest(reg, v_both)
+print(reg_both, digits=6)
+```
+
+
+\newpage
+# OLS: Fama-Macbeth
+
+## Stata
+
+This uses Petersen's [fm.ado
+function](https://www.kellogg.northwestern.edu/faculty/petersen/htm/papers/se/fm.ado)
+from his website.
+
+```{stata fms, results=show, echo=whichlines(-4)}
+use "data/test_data.dta"
+tsset firm year
+fm y x
+outreg2 using tmp, ctitle(Fama-Macbeth) auto(5) tex(fragment)
+```
+
+
+## R
+
+The `plm` package handles panel models. Results from the Stata
+Fama-Macbeth function above can be replicated with a standard panel
+model using a grouped means estimator (the `plm::pmg` function in
+R).^[This is discussed in [this blog post](https://landroni.wordpress.com/2012/06/02/fama-macbeth-and-cluster-robust-by-firm-and-time-standard-errors-in-r/).]
+
+```{r fmr, results=show, echo=whichlines(-4)}
+library(plm)
+fpmg <- pmg(y~x, data=PetersenCL, index=c("year","firm")) ##Fama-MacBeth
+reg_fm <- coeftest(fpmg)
+print(coeftest(fpmg), digits=6)
+```
+
+\newpage
+
+# Limited dependent variables
+
+The standard Stata and R procedures produce identical answers for
+logit and tobit. This is also true for probit, provided that the same
+numerical procedure is used for estimation. Maximum likelihood and glm
+estimates differ slightly, but  Stata and R produce identical results
+when using the same estimation procedure.
+
+
+@petersen:09 includes examples of double clustering for limited
+dependent models. To illustrate double clustering with limited
+dependent models, we will create two new variables, `yl`, which equals
+1 if $y>0$ and 0 otherwise, and `ytrunc`, which equals `y` if $y > 0$
+and 0 otherwise. I'm not sure how to think about clustering in the
+context of limited dependent models, but [this stackoverflow
+post](https://stackoverflow.com/questions/27367974/different-robust-standard-errors-of-logit-regression-in-stata-and-r?noredirect=1&lq=1)
+suggests that clustered standard errors for binary response models are
+not necessarily wrong but don't really make sense.^[As I understand
+it, the point is that robust standard errors are correct if the model
+is otherwise specified and estimated correctly. However, with a
+limited dependent model, the initial coefficient estimates depend on
+the underlying covariance, so it doesn't make sense to estimate the
+model and then go back and correct the covariance.]
+
+
+With R, the same procedure used above works with the `glm` function,
+which handles limited dependent models. We first estimate the
+regression without a correction for clustering, then we use `vcovCL`
+to compute cluster-corrected standard errors. 
+
+
+## Logit 
+
+Stata results in this section are in Table \ref{tbl:logit:stata}. R
+results are in Table \ref{tbl:logit:r}.
+
+
+###  Stata
+
+```{stata, results=show, echo=whichlines(-c(4, 6, 8, 10, 12))}
+use "data/petersen.dta"
+gen yl = (y > 0)
+logit yl x
+outreg2 using tmp2, ctitle(Logit,)  auto(5) replace
+logit yl x, vce(robust)
+outreg2 using tmp2, ctitle(Logit,robust)  auto(5) 
+logit yl x, vce(cluster firm)
+outreg2 using tmp2, ctitle(Logit,cluster: firm)  auto(5)
+logit yl x, vce(cluster year)
+outreg2 using tmp2, ctitle(Logit,cluster: year)  auto(5)
+logit2 yl x, fcluster(firm) tcluster(year)
+outreg2 using tmp2, ctitle(Logit,cluster: both)  auto(5) tex(frag)
+```
+
+
+###  R
+ 
+We create the limited dependent variables in R:
+```{r}
+PetersenCL$yl <- (PetersenCL$y > 0)
+PetersenCL$ytrunc <- ifelse(PetersenCL$y > 0, PetersenCL$y, 0)
+```
+
+
+```{r, results=show, echo=whichlines(-c(2, 8))}
+reg.logit = glm(yl ~ x, data=PetersenCL, family=binomial(link='logit'))
+print(summary(reg.logit), digits=6)
+logit0 = coeftest(reg.logit)
+logit_robust = coeftest(reg.logit, vcovCL(reg.logit, type='HC0'))
+logit_firm = coeftest(reg.logit, vcovCL(reg.logit, type='HC0', cluster=~firm))
+logit_year = coeftest(reg.logit, vcovCL(reg.logit, type='HC0', cluster=~year))
+logit_both = coeftest(reg.logit, vcovCL(reg.logit, type='HC0', cluster=~year+firm))
+print(logit_both, digits=6)
+```
+
+
+
+## Probit
+
+In both Stata and R, probit estimation can be performed using maximum
+likelihood or iterated reweighted least squares (IRLS). The different
+methods give slightly different answers.  This causes confusion, as
+illustrated in [this stackoverflow
+post](https://stackoverflow.com/questions/30236487/replicating-stata-probit-with-robust-errors-in-r).
+
+
+In this section we compare probit estimates obtained using the
+`probit` functions available in Stata and R, which use maximum
+likelihood, and those obtained using the glm functions in Stata and R,
+which (optionally, in the case of Stata) use IRLS. In each case, when
+the numerical procedure is the same, results are identical between
+Stata and R.
+
+
+
+### Generalized linear model: Stata
+
+We do probit estimation using Stata's glm function with the irls
+option. 
+We have four sets of probit estimates from Stata.  We
+only perform single clustering in this example as the `vce(cluster)`
+option can only take one variable.
+
+Results are in Table \ref{tbl:probitglm:stata}.
+
+```{stata, results=show, echo=whichlines(-c(4, 6, 8, 10))}
+use "data/petersen.dta"
+gen yl = (y > 0)
+glm yl x, irls family(binomial) link(probit) 
+outreg2 using tmp4, ctitle(Probit,)  auto(5) replace
+glm yl x, irls family(binomial) link(probit) robust
+outreg2 using tmp4, ctitle(Probit,robust)  auto(5)
+glm yl x, irls family(binomial) link(probit) vce(cluster firm)
+outreg2 using tmp4, ctitle(Probit,cluster: firm)  auto(5)
+glm yl x, irls family(binomial) link(probit) vce(cluster year)
+outreg2 using tmp4, ctitle(Probit,cluster: year)  auto(5) tex(frag)
+
+```
+
+
+### Generalized linear model: R
+
+Here we present results for simple robust standard errors, along with
+both single and double clustering. Results are in Table \ref{tbl:probitglm:r}.
+
+```{r, results=show, echo=whichlines(-c(2, 5, 7, 9, 11))}
+reg.probit <- glm(yl ~ x, data=PetersenCL, family=binomial(link='probit'))
+print(summary(reg.probit), digits=6)
+probitglm0 = coeftest(reg.probit)
+probitglm_robust <- coeftest(reg.probit, vcovCL, type='HC0')
+print(probitglm_robust, digits=6)
+probitglm_firm <- coeftest(reg.probit, vcovCL, type='HC0', cluster=~firm)
+print(probitglm_firm, digits=6)
+probitglm_year <- coeftest(reg.probit, vcovCL, type='HC0', cluster=~year)
+print(probitglm_year, digits=6)
+probitglm_both <- coeftest(reg.probit, vcovCL, type='HC0', cluster=~firm+year)
+print(probitglm_both, digits=6)
+```
+
+
+### Maximum likelihood: Stata
+
+
+We obtain identical estimates in Stata and R when using the
+`sampleSelection::probit` function in R. It is notable that  the
+`sandwich` package works correctly with the `sampleSelection`
+package. Results are in Table \ref{tbl:probitml:stata}.
+
+
+```{stata, results=show, echo=whichlines(-c(4, 6, 8, 10, 12))}
+use "data/petersen.dta"
+gen yl = (y > 0)
+probit yl x
+outreg2 using tmp5, ctitle(OLS)  auto(5) replace
+probit yl x, robust
+outreg2 using tmp5, ctitle(Probit,robust)  auto(5) 
+probit yl x, vce(cluster firm)
+outreg2 using tmp5, ctitle(Probit,cluster: firm)  auto(5) 
+probit yl x, vce(cluster year)
+outreg2 using tmp5, ctitle(Probit,cluster: year)  auto(5) 
+probit2 yl x, fcluster(firm) tcluster(year)
+outreg2 using tmp5, ctitle(Probit,cluster: both)  auto(5) tex(frag)
+```
+
+
+### Maximum likelihood: R
+
+In R, a direct maximum likelihood probit function is available in the
+`sampleSelection` package. Results are in Table \ref{tbl:probitml:r}.
+
+```{r, results=show, echo=whichlines(-c(3, 9, 10))}
+library(sampleSelection)
+reg.probit <- probit(yl ~ x, data=PetersenCL)
+print(summary(reg.probit), digits=6)
+probitml0 <- coeftest(reg.probit)
+probitml_robust <- coeftest(reg.probit, vcovCL)
+probitml_firm <- coeftest(reg.probit, vcovCL, type='HC0', cluster=~firm)
+probitml_year <- coeftest(reg.probit, vcovCL, type='HC0', cluster=~year)
+probitml_both <- coeftest(reg.probit, vcovCL, type='HC0', cluster=~firm+year)
+print(probitml0, digits=6)
+print(probitml_both, digits=6)
+```
+
+## Tobit
+
+###  Stata
+
+I'm not sure what `outreg2` is doing with the tobit output in this
+example, but the tables are off. Suggestions welcome. Results are in
+Tables \ref{tbl:tobita:stata} -- \ref{tbl:tobitc:stata}.
+
+
+```{stata, results=show, echo=whichlines(-c(5, 7, 9))}
+use "data/petersen.dta"
+gen ytrunc = y
+replace ytrunc = 0 if y < 0
+tobit ytrunc x, ll(0)
+outreg2 using tmp3a, ctitle(Tobit,)  auto(5) onecol tex(frag) replace
+tobit ytrunc x, ll(0) vce(cluster firm) 
+outreg2 using tmp3b, ctitle(Tobit,cluster: firm)  auto(5) onecol tex(frag) replace
+tobit2 ytrunc x, ll(0) fcluster(firm) tcluster(year)
+outreg2 using tmp3c, ctitle(Tobit,cluster: both)  auto(5) tex(frag) onecol replace
+```
+
+
+###  R
+
+Results are in Table \ref{tbl:tobit:r}.
+
+
+```{r, results=show, echo=whichlines(-c(9, 8))}
+library(censReg)
+reg.tobit <- censReg(ytrunc ~ x, data=PetersenCL, left=0)
+tobit0 <- coeftest(reg.tobit)
+tobit_robust <- coeftest(reg.tobit, vcovCL, type='HC0')
+tobit_firm <- coeftest(reg.tobit, vcovCL, type='HC0', cluster=~firm)
+tobit_year <- coeftest(reg.tobit, vcovCL, type='HC0', cluster=~year)
+tobit_both <- coeftest(reg.tobit, vcovCL, type='HC0', cluster=~firm+year)
+print(summary(reg.tobit), digits=6)
+print(tobit_both, digits=6)
+```
+
+
+\newpage
+
+
+# Summary tables
+
+The following tables summarize the results for Stata and R. The code
+that produced these results is in the preceding sections. Stata tables
+were produced using `outreg2` and R tables were produced using
+`stargazer`. For details, see the Rmarkdown version of this document.
+
+## OLS and Fama-Macbeth
+
+
+\begin{table}[h]
+\center
+\footnotesize
+\caption{Vanilla and clustered standard errors for OLS, and Fama-Macbeth: Stata}
+\label{tbl:ols:stata}
+\input{tmp}
+\end{table}
+
+
+
+```{r olstblr, results = 'asis', echo=FALSE}
+stargazer(OLS=reg, 'OLS robust'=reg,  Year=reg, Firm=reg,
+          'Firm+Year'=reg, 'Fama-Macbeth'=fpmg
+         ,se=list(regols[,2], regolsr[,2], reg_year[,2], reg_firm[,2],
+                 reg_both[,2], reg_fm[,2])
+         ,type=output_type
+         ,header=FALSE
+         ,column.labels=c('OLS', 'Robust OLS', 'Cluster: year',
+                         'Cluster: firm', 'Cluster: both', 'Fama-Macbeth')
+         ,title='Vanilla and clustered standard errors for OLS, and Fama-Macbeth: R'
+         ,no.space=TRUE  ## no blank line between estimates
+         ,digits=6
+         ,column.sep.width='2pt'
+         ,add.lines=list(c('Cluster:', 'None', 'Robust', 'Firm', 'Year', 'Firm+Year'))
+         ,dep.var.caption=''
+         ,dep.var.labels=''
+         ,dep.var.labels.include=FALSE
+         ,model.names=FALSE  ## controls "coefficient" string on top
+         ,model.numbers=TRUE
+         ,omit.stat=c('f', 'ser', 'adj.rsq')
+         ,intercept.bottom=TRUE
+         ,label='tbl:ols:r'
+         ,font.size='footnotesize'
+          )
+          
+```
+
+\normalsize
+
+\newpage
+
+## Logit
+
+\begin{table}[h]
+\center
+\caption{Vanilla and clustered standard errors for Logit: Stata}
+\label{tbl:logit:stata}
+\input{tmp2}
+\end{table}
+
+
+
+
+```{r, results = 'asis', echo=FALSE}
+stargazer(reg.logit, reg.logit, reg.logit, reg.logit, reg.logit
+         ,se=list(logit0[,2], logit_robust[,2], logit_firm[,2],
+                  logit_year[, 2], logit_both[,2])
+          ,type=output_type
+         ,header=FALSE
+         ,column.labels=c('Logit', 'Robust', 'Cluster: firm',
+                          'Cluster: year','Cluster: both')
+         ,title='Vanilla and clustered standard errors for logit: R'
+         ,no.space=TRUE  ## no blank line between estimates
+         ,digits=6
+         ,column.sep.width='2pt'
+         ,add.lines=list(c('Cluster:', 'None', 'Robust', 'Firm', 'Year', 'Firm+Year'))
+         ,dep.var.caption=''
+         ,dep.var.labels=''
+         ,dep.var.labels.include=FALSE
+         ,model.names=FALSE  ## controls "coefficient" string on top
+         ,model.numbers=TRUE
+         ,omit.stat=c('f', 'ser', 'adj.rsq', 'aic', 'll')
+         ,intercept.bottom=TRUE
+         ,label='tbl:logit:r'
+          ,table.placement='h'
+          )
+          
+```
+
+\newpage
+
+## Probit
+
+Stata results in this section are in Table \ref{tbl:probitglm:stata}. R
+results are in Table \ref{tbl:probitglm:r}.
+
+
+### GLM
+
+
+\begin{table}[h]
+\center
+\caption{Probit GLM output: Stata}
+\label{tbl:probitglm:stata}
+\input{tmp4}
+\end{table}
+
+
+
+```{r, results = 'asis', echo=FALSE}
+stargazer(reg.probit, reg.probit, reg.probit, reg.probit, reg.probit
+         ,se=list(probitglm0[,2], probitglm_robust[,2], probitglm_firm[,2],
+                  probitglm_year[, 2], probitglm_both[,2])
+          ,type=output_type
+         ,header=FALSE
+         ,column.labels=c('Probit', 'Robust', 'Cluster: firm',
+                          'Cluster: year', 'Cluster: both')
+         ,title='Vanilla and clustered standard errors for GLM probit: R'
+         ,no.space=TRUE  ## no blank line between estimates
+         ,digits=6
+         ,column.sep.width='2pt'
+         ,add.lines=list(c('Cluster:', 'None', 'Robust', 'Firm', 'Year', 'Firm+Year'))
+         ,dep.var.caption=''
+         ,dep.var.labels=''
+         ,dep.var.labels.include=FALSE
+         ,model.names=FALSE  ## controls "coefficient" string on top
+         ,model.numbers=TRUE
+         ,omit.stat=c('f', 'ser', 'adj.rsq', 'aic', 'll', 'chi2')
+         ,intercept.bottom=TRUE
+         ,label='tbl:probitglm:r'
+          ,table.placement='h'
+          )
+          
+```
+
+\newpage
+
+### Maximum likelihood
+
+Stata results in this section are in Table \ref{tbl:probitml:stata}. R
+results are in Table \ref{tbl:probitml:r}.
+
+
+\begin{table}[h]
+\center
+\caption{Probit ML output: Stata}
+\label{tbl:probitml:stata}
+\input{tmp5}
+\end{table}
+
+
+
+```{r, results = 'asis', echo=FALSE}
+stargazer(reg.probit, reg.probit, reg.probit, reg.probit, reg.probit
+         ,se=list(probitml0[,2], probitml_robust[,2], probitml_firm[,2],
+                  probitml_year[, 2], probitml_both[,2])
+          ,type=output_type
+         ,header=FALSE
+         ,column.labels=c('Probit', 'Robust', 'Cluster: firm', 'Cluster: year',
+                          'Cluster: both')
+         ,title='Vanilla and clustered standard errors for ML probit: R'
+         ,no.space=TRUE  ## no blank line between estimates
+         ,digits=6
+         ,column.sep.width='2pt'
+         ,add.lines=list(c('Cluster:', 'None', 'Robust', 'Firm', 'Year', 'Firm+Year'))
+         ,dep.var.caption=''
+         ,dep.var.labels=''
+         ,dep.var.labels.include=FALSE
+         ,model.names=FALSE  ## controls "coefficient" string on top
+         ,model.numbers=TRUE
+         ,omit.stat=c('f', 'ser', 'adj.rsq', 'aic', 'll', 'chi2')
+         ,intercept.bottom=TRUE
+         ,label='tbl:probitml:r'
+          ,table.placement='h'
+          )
+          
+```
+
+
+\newpage
+
+
+## Tobit
+
+\begin{table}[h]
+\center
+\caption{Tobit output: Stata}
+\label{tbl:tobita:stata}
+\input{tmp3a}
+\end{table}
+
+
+\begin{table}[h]
+\center
+\caption{Tobit output: Stata}
+\label{tbl:tobitb:stata}
+\input{tmp3b}
+\end{table}
+
+
+\begin{table}[h]
+\center
+\caption{Tobit output: Stata}
+\label{tbl:tobitc:stata}
+\input{tmp3c}
+\end{table}
+
+
+```{r, results='asis', echo=FALSE}
+stargazer(reg.tobit, reg.tobit, reg.tobit, reg.tobit, reg.tobit
+         ,se=list(tobit0[,2], tobit_robust[,2], tobit_firm[,2],
+                  tobit_year[, 2], tobit_both[,2])
+          ,type=output_type
+         ,header=FALSE
+         ,column.labels=c('Tobit', 'Robust', 'Cluster: year', 'Cluster: firm',
+                          'Cluster: both')
+         ,title='Vanilla and clustered standard errors for tobit: R'
+         ,no.space=TRUE  ## no blank line between estimates
+         ,digits=6
+         ,column.sep.width='2pt'
+         ,add.lines=list(c('Cluster:', 'None', 'Robust', 'Firm', 'Year', 'Firm+Year'))
+         ,dep.var.caption=''
+         ,dep.var.labels=''
+         ,dep.var.labels.include=FALSE
+         ,model.names=FALSE  ## controls "coefficient" string on top
+         ,model.numbers=TRUE
+         ,omit.stat=c('f', 'ser', 'adj.rsq', 'aic', 'bic', 'll')
+         ,intercept.bottom=TRUE
+         ,label='tbl:tobit:r'
+          ,table.placement='h'
+          )
+          
+```
+
+
+
+\clearpage
+
+
+# Appendix
+
+## Table creation
+
+In order to focus on the econometric commands, the code chunks
+displayed in the text hid the commands necessary to produce the Stata
+output tables. In this section we present the complete code, including
+the `outreg2` commands used to compute tables. These listings also
+show the R print statements that produce terminal output similar to
+Stata's default terminal output.
+
+The procedure for producting formatted tables differs with Stata and
+R.  In Stata, table options are specified along with each regression,
+and the resulting file is then read into the final document. With R,
+regression results are saved in a variable and table options are
+specified when the table is created.
+
+### Stata tables
+
+
+```{r, eval=FALSE}
+    ## Base OLS and robust
+    <<olsbases>>
+
+    ## Cluster by year
+    <<clusteryears>>
+
+    ## cluster by firm
+    <<clusterfirms>>
+
+    ## cluster by both
+    <<clusterboths>>
+
+    ## fama-macbeth
+    <<fms>>
+
+```
+
+\medskip
+
+Because the table options have been specified in each regression, with
+LaTeX it is only necessary to use `\input{tmp}` to create the
+formatted Table \ref{tbl:ols:stata}.
+
+\newpage
+
+### R tables
+
+
+Each set of commands below produces regression coefficients and
+standard errors, storing the results in a variable (OLS estimates in
+`reg`, cluster-by-year estimates in `reg_year`,
+etc.) These commands run the various regressions and compute standard
+errors, storing each result in a variable. The `print` statements
+included below create output that resembles the Stata output for a
+regression. They are not necessary to create the formatted table.
+
+\bigskip
+
+
+```{r, eval=FALSE}
+    ## Base OLS and robust
+    <<olsbaser>>
+
+    ## Cluster by year
+    <<clusteryearr>>
+
+    ## cluster by firm
+    <<clusterfirmr>>
+
+    ## cluster by both
+    <<clusterbothr>>
+
+    ## fama-macbeth
+    <<fmr>>
+
+```
+
+\newpage
+
+Table \ref{tbl:ols:r} is produced by the
+[`stargazer`](https://cran.r-project.org/package=stargazer)
+function. There are other functions that can produce tables from
+regression objects, including
+[`texreg`](https://cran.r-project.org/package=texreg),
+[apsrtable](https://cran.r-project.org/package=apsrtable), and
+[`pander`](https://cran.r-project.org/package=pander).
+
+\bigskip
+
+```{r, eval=FALSE}
+<<olstblr>>
+```
+
+```{r, echo=FALSE, results='hide'}
+f <- list.files()
+#fremove <- grep('tmp.*txt', f, value=TRUE) 
+#file.remove(fremove)
+```
+
+
+
+# References
+
+

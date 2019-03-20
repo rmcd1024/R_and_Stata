@@ -1,10 +1,6 @@
 This is an idiosyncratic collection of items pertaining to both Stata
 and R.
 
-  - Clustered standard errors in Stata and R:
-    [pdf](docs/stata_and_R_clustering.pdf),
-    [html](docs/stata_and_R_clustering.html)
-
 Files are licensed either under the MIT license or Creative Commons
 SA-BY-4.0 unless explicitly otherwise.
 

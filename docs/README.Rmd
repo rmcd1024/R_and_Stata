@@ -6,7 +6,6 @@ output:
      variant: gfm
 ---
 
-## [Robert McDonald](https://www.kellogg.northwestern.edu/faculty/directory/mcdonald_robert.aspx)
 
 This is an idiosyncratic collection of items pertaining to both Stata
 and R. See the [github page](https://github.com/rmcd1024/R_and_Stata)
@@ -19,4 +18,6 @@ for Rmarkdown source files.
 
 Files are licensed either under the MIT license or Creative Commons
 SA-BY-4.0 unless explicitly otherwise.
+
+Author: [Robert McDonald](https://www.kellogg.northwestern.edu/faculty/directory/mcdonald_robert.aspx), with contributions by [Mitchell Petersen](http://www.kellogg.northwestern.edu/faculty/directory/petersen_mitchell_a.aspx) and Jingling Guan.
 

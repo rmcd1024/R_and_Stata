@@ -1,3 +1,5 @@
+## [Robert McDonald](https://www.kellogg.northwestern.edu/faculty/directory/mcdonald_robert.aspx)
+
 This is an idiosyncratic collection of items pertaining to both Stata
 and R. See the [github page](https://github.com/rmcd1024/R_and_Stata)
 for Rmarkdown source files.
@@ -5,3 +7,6 @@ for Rmarkdown source files.
   - Clustered standard errors in Stata and R:
     [pdf](stata_and_R_clustering.pdf),
     [html](stata_and_R_clustering.html)
+
+Files are licensed either under the MIT license or Creative Commons
+SA-BY-4.0 unless explicitly otherwise.

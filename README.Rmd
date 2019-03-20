@@ -8,6 +8,8 @@ output:
 This is an idiosyncratic collection of items pertaining to both Stata
 and R. 
 
+
+
 Files are licensed either under the MIT license or Creative Commons
 SA-BY-4.0 unless explicitly otherwise.
 
